@@ -1,0 +1,197 @@
+
+-----------------------------------
+Примеры всех возможных запросов для будущего приложения 
+-----------------------------------
+
+
+Сколько всего юзеров
+SELECT count(*) FROM public.users;
+
+Сколько в системе дарителей сейчас
+SELECT count(DISTINCT user_id) FROM public.things
+
+Сколько людей запрашивают подарки сейчас
+SELECT count(DISTINCT user_id) FROM public.applications
+
+Сколько людей получили подарки всего
+SELECT count(DISTINCT user_id) FROM public.applications WHERE status = 3
+
+Покажи ВСЕ мои вещи активные
+SELECT * FROM public.things
+WHERE user_id = '6d42e365-be3e-4b9b-bdbf-9c3767b462eb'
+AND delete_date IS null;
+
+Покажи ВСЕ мои вещи на которые есть желающие (заявки)
+SELECT public.things.* FROM public.things, public.applications
+WHERE public.things.user_id = '4706beb9-76ef-4f42-a9d2-454f381978e3'
+AND public.things.id = public.applications.thing_id
+AND public.applications.delete_date is NULL
+
+Покажи ВСЕ мои вещи на которые уже выбраны одаряемые
+SELECT public.things.* FROM public.things, public.applications
+WHERE public.things.user_id = '4706beb9-76ef-4f42-a9d2-454f381978e3'
+AND public.things.id = public.applications.thing_id
+AND public.applications.status = 2
+
+Мои вещи где я в роли одаряемого
+SELECT  public.applications.* FROM public.applications
+INNER JOIN public.users
+ON public.applications.user_id = public.users.id
+WHERE public.users.id = '167aa3f5-cdfd-42ac-93a2-8430457809ff'
+AND public.applications.delete_date is NULL
+
+
+Покажи мне все входящие заявки на мою вещь
+Покажи мне все входящие заявки на все мои вещи
+Посчитай количество заявок
+-- SELECT count(public.applications.*) FROM public.applications  -- сколько всего хочет
+SELECT public.applications.* FROM public.applications
+INNER JOIN public.things
+ON public.things.id = public.applications.thing_id
+INNER JOIN public.users
+ON public.things.user_id = public.users.id
+WHERE public.users.id = '4706beb9-76ef-4f42-a9d2-454f381978e3'
+AND public.applications.delete_date IS NULL
+-- AND public.things.id = 'aa79ec8e-10b8-4c18-af0d-472d13210619'  -- на конкретную вещь
+-- AND public.applications.status = 1 -- вернуть заявки с нужным статусом
+ 
+
+--Получить по id вещи её статус участия в возможном движении по воркфоу (участии в заявках). 
+WITH thing_lookup AS
+    (SELECT * FROM public.things 
+	 LEFT JOIN public.applications ON public.things.id = public.applications.thing_id
+	WHERE public.applications.thing_id = 'aa79ec8e-10b8-4c18-af0d-472d13210619'),
+	 statuses_temp AS 
+  (SELECT CASE
+  WHEN status is NULL THEN '1'
+  ELSE status
+END AS status
+FROM thing_lookup)
+SELECT max(status)
+FROM statuses_temp;
+
+
+--Отказать всем заявкам когда вещь уже кому-то отдана
+UPDATE public.applications
+SET status = 5
+WHERE thing_id = 'aa79ec8e-10b8-4c18-af0d-472d13210619'
+AND status != 3
+
+--Выбрать дарителя для вещи которую он запросил
+UPDATE public.applications
+SET status = 3
+WHERE thing_id = 'aa79ec8e-10b8-4c18-af0d-472d13210619'
+and user_id = '90e9dedb-36a9-496e-aa4e-e4801f10b93c'
+
+
+
+-- Лента. найти все вещи с поиском и фильтрами
+SELECT COALESCE(public.applications.status, '0') AS status, public.things.* FROM public.things
+LEFT JOIN public.applications ON public.things.id = public.applications.thing_id
+WHERE public.things.delete_date is NULL
+--AND COALESCE(public.applications.status, '0') IN (0, 1, 2) -- в общую ленту идут только такие статусы
+--AND public.things.name ILIKE CONCAT('%', '', '%')
+--AND public.things.category = 1
+--AND public.things.location = 3
+--AND public.things.user_id = '6d42e365-be3e-4b9b-bdbf-9c3767b462eb' -- найти для определенного дарителя
+ORDER BY add_date;
+LIMIT 20 OFFSET 0 -- limit = page_size = 20, offset = page_size * page_number(starts from zero)
+
+
+
+--Пометить заявку как отказанную 
+UPDATE public.applications
+SET status = 5
+WHERE public.applications.id = '79efadda-c53c-44ed-83ac-20b2cfe97163'
+
+--Пометить заявку как архивную
+UPDATE public.applications
+SET status = 4
+WHERE public.applications.id = '79efadda-c53c-44ed-83ac-20b2cfe97163'
+
+--Пометить заявку как удаленную
+UPDATE public.applications
+SET delete_date = now()
+WHERE public.applications.id = '79efadda-c53c-44ed-83ac-20b2cfe97163'
+
+--Отменить удаление заявки
+UPDATE public.applications
+SET delete_date = NULL
+WHERE public.applications.id = '79efadda-c53c-44ed-83ac-20b2cfe97163'
+
+--Пометить вещь как удаленную
+UPDATE public.things
+SET delete_date = now()
+WHERE public.things.id = '8950d180-c9d4-421f-8467-3bdab2be9d9e'
+
+--Отменить удаление заявки
+UPDATE public.things
+SET delete_date = NULL
+WHERE public.things.id = '8950d180-c9d4-421f-8467-3bdab2be9d9e'
+
+Создать вещь
+INSERT INTO "things" (
+    "id",
+    "name",
+    "category",
+    "description",
+    "location",
+    "user_id",
+    "add_date",
+    "edit_date",
+    "delete_date"
+) VALUES (
+    gen_random_uuid(), -- Новый UUID для компьютера
+    'Sony playstation 3',
+    1, -- ID категории 'Электроника'
+    'Приставка работает, диски не все читает. Отдам пару штук',
+    2, -- ID локации 'Санкт-Петербург'
+    '4706beb9-76ef-4f42-a9d2-454f381978e3', -- UUID владельца
+    NOW(),
+    NOW(),
+    NULL
+);
+
+
+
+Создать заявку на вещь
+INSERT INTO "applications" (
+    "id",
+    "date",
+    "status",
+    "create_date",
+    "user_id",
+    "thing_id",
+    "ask_text",
+    "edit_date",
+    "delete_date"
+) VALUES (
+    gen_random_uuid(), -- Генерируем уникальный ID для самой заявки
+    NOW(), -- Дата заявки
+    1, -- Статус 'Новая' (из добавленного ранее справочника статусов)
+    NOW(), -- Дата создания
+    'd9c9a96c-7ccb-4342-9c69-41bea9948c23', -- ID пользователя, который просит комп
+    'aa79ec8e-10b8-4c18-af0d-472d13210619', -- ID компьютера
+    'Хочу эту приставку', -- Текст вашей заявки
+    NOW(), -- Дата редактирования
+    NULL -- delete_date оставляем пустым
+);
+
+
+
+
+--Пометить юзера как удаленного
+UPDATE public.users
+SET delete_date = now()
+WHERE public.users.id = '6d42e365-be3e-4b9b-bdbf-9c3767b462eb'
+
+--Отменить удаление заявки
+UPDATE public.users
+SET delete_date = NULL
+WHERE public.users.id = '6d42e365-be3e-4b9b-bdbf-9c3767b462eb'
+
+
+
+
+
+
